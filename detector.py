@@ -24,7 +24,7 @@ class Tracker:
 model = YOLO("yolov8n.pt")
 tracker = Tracker()
 
-def detect_and_track(frame):
+def detect_objects(frame):
     results = model(frame)
     detections = []
 

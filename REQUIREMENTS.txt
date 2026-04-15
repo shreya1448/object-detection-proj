@@ -1,0 +1,8 @@
+streamlit
+opencv-python-headless==4.8.0.76
+ultralytics==8.0.20
+torch==2.0.1
+torchvision==0.15.2
+numpy
+filterpy
+scipy

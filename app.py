@@ -1,113 +1,82 @@
 import streamlit as st
 import cv2
 import numpy as np
-import time
 from detector import detect_objects
+import os
 
+# -------------------------------
+# Page Config
+# -------------------------------
 st.set_page_config(page_title="Object Detection Dashboard", layout="wide")
 
 st.title("🚀 Real-Time Object Detection Dashboard")
 
+# -------------------------------
+# Detect if running on cloud
+# -------------------------------
+is_cloud = os.getenv("STREAMLIT_SERVER_HEADLESS", False)
+
+# -------------------------------
 # Sidebar
+# -------------------------------
 st.sidebar.header("Settings")
-run_webcam = st.sidebar.checkbox("Start Webcam")
-capture_frame = st.sidebar.button("📸 Capture Frame")
 
-# Layout
-col1, col2 = st.columns(2)
+if not is_cloud:
+    run_webcam = st.sidebar.checkbox("Start Webcam")
+else:
+    st.sidebar.warning("⚠️ Webcam not supported on deployed app")
+    run_webcam = False
 
-frame_placeholder = col1.empty()
-info_placeholder = col2.empty()
-
-# =========================
-# 🔹 WEBCAM MODE
-# =========================
-if run_webcam:
-    cap = cv2.VideoCapture(0)
-    prev_time = 0
-
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            st.error("Failed to access webcam")
-            break
-
-        frame = cv2.resize(frame, (640, 480))
-
-        # FPS calculation
-        curr_time = time.time()
-        fps = 1 / (curr_time - prev_time) if prev_time != 0 else 0
-        prev_time = curr_time
-
-        annotated_frame, labels, counts = detect_objects(frame)
-
-        # Add FPS text
-        cv2.putText(annotated_frame, f"FPS: {int(fps)}",
-                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
-                    1, (0, 255, 0), 2)
-
-        # Convert for Streamlit
-        display_frame = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
-
-        frame_placeholder.image(display_frame, channels="RGB")
-
-        # Info panel
-        with info_placeholder.container():
-            st.subheader("Detected Objects")
-            for label, conf in labels:
-                st.write(f"{label} ({conf:.2f})")
-
-            st.subheader("Object Count")
-            st.write(counts)
-
-            # Alerts
-            if "person" in counts:
-                st.warning("⚠️ Person detected!")
-
-        # Capture + Download
-        if capture_frame:
-            _, buffer = cv2.imencode('.jpg', annotated_frame)
-            st.download_button(
-                label="Download Captured Frame",
-                data=buffer.tobytes(),
-                file_name="captured.jpg",
-                mime="image/jpeg"
-            )
-
-# =========================
-# 🔹 IMAGE UPLOAD MODE
-# =========================
-st.sidebar.header("Upload Image")
 uploaded_file = st.sidebar.file_uploader("Upload Image", type=["jpg", "png", "jpeg"])
 
+# -------------------------------
+# Webcam Section (LOCAL ONLY)
+# -------------------------------
+if run_webcam:
+    cap = cv2.VideoCapture(0)
+    stframe = st.empty()
+
+    if not cap.isOpened():
+        st.error("Failed to access webcam")
+    else:
+        while run_webcam:
+            ret, frame = cap.read()
+            if not ret:
+                st.error("Failed to read frame")
+                break
+
+            annotated_frame = detect_objects(frame)
+            stframe.image(annotated_frame, channels="BGR")
+
+        cap.release()
+
+# -------------------------------
+# Image Upload Section
+# -------------------------------
 if uploaded_file is not None:
     file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
-    frame = cv2.imdecode(file_bytes, 1)
+    image = cv2.imdecode(file_bytes, 1)
 
-    annotated_frame, labels, counts = detect_objects(frame)
+    st.subheader("📷 Uploaded Image")
+    st.image(image, channels="BGR")
 
-    # Convert for display
-    display_frame = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
+    # Run detection
+    result = detect_objects(image)
 
-    col1.image(display_frame, channels="RGB")
+    st.subheader("🎯 Detection Result")
+    st.image(result, channels="BGR")
 
-    with col2:
-        st.subheader("Detected Objects")
-        for label, conf in labels:
-            st.write(f"{label} ({conf:.2f})")
+    # Download button
+    _, buffer = cv2.imencode(".jpg", result)
+    st.download_button(
+        label="Download Result",
+        data=buffer.tobytes(),
+        file_name="detected.jpg",
+        mime="image/jpeg"
+    )
 
-        st.subheader("Object Count")
-        st.write(counts)
-
-        # Alerts
-        if "person" in counts:
-            st.warning("⚠️ Person detected!")
-
-        # ✅ Download button (correct placement)
-        _, buffer = cv2.imencode('.jpg', annotated_frame)
-        st.download_button(
-            label="Download Image",
-            data=buffer.tobytes(),
-            file_name="detected.jpg",
-            mime="image/jpeg"
-        )
+# -------------------------------
+# Footer
+# -------------------------------
+st.markdown("---")
+st.markdown("Built with ❤️ using Streamlit & YOLOv8")
